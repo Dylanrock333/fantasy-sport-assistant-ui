@@ -1,10 +1,34 @@
 import { useState } from 'react'
 import './App.css'
+import Trace from './Trace'
+import Markdown from './Markdown'
 
-// TODO: replace with real API call once endpoint details are provided
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
+const LEAGUE_ID = import.meta.env.VITE_LEAGUE_ID
+const TEAM_NAME = import.meta.env.VITE_TEAM_NAME
+
 async function sendMessage(messages) {
-  await new Promise((resolve) => setTimeout(resolve, 800))
-  return 'This is a placeholder response. Hook up the real API to replace me.'
+  const lastMessage = messages[messages.length - 1].content
+
+  const response = await fetch(`${API_URL}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: lastMessage,
+      league_id: Number(LEAGUE_ID),
+      ...(TEAM_NAME ? { team_name: TEAM_NAME } : {}),
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status}`)
+  }
+
+  const data = await response.json()
+  return {
+    reply: data.reply ?? data.response ?? data.message ?? JSON.stringify(data),
+    trace: data.trace,
+  }
 }
 
 function App() {
@@ -22,8 +46,10 @@ function App() {
     setLoading(true)
 
     try {
-      const reply = await sendMessage(nextMessages)
-      setMessages([...nextMessages, { role: 'assistant', content: reply }])
+      const { reply, trace } = await sendMessage(nextMessages)
+      setMessages([...nextMessages, { role: 'assistant', content: reply, trace }])
+    } catch (err) {
+      setMessages([...nextMessages, { role: 'assistant', content: `Error: ${err.message}` }])
     } finally {
       setLoading(false)
     }
@@ -52,7 +78,8 @@ function App() {
       <main className="chat-messages">
         {messages.map((msg, i) => (
           <div key={i} className={`message ${msg.role}`}>
-            {msg.content}
+            {msg.role === 'assistant' ? <Markdown text={msg.content} /> : msg.content}
+            {msg.trace && <Trace trace={msg.trace} />}
           </div>
         ))}
         {loading && <div className="message assistant loading">Thinking…</div>}
